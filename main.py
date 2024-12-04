@@ -33,7 +33,7 @@ elif window == "MacroScore™":
     
     stock = st.text_input("Enter a stock symbol")
     countries = st.multiselect("Select countries", countries, format_func=lambda x: x['name'])
-    industry = st.selectbox("Select an industry", ["Automotive", "Consumer goods", "Healthcare", "Energy", "Telecommunications"])
+    industry = st.selectbox("Select an industry", ["Automotive", "Consumer goods", "Financial services", "Healthcare", "Energy", "Telecommunications"])
     revenue_countries = []
     st.write("#### Add revenue distribution")
     for country in countries:

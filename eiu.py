@@ -88,7 +88,6 @@ class EIU:
                 "reportCode": report_code,
                 "geographyCode": country_code
             }
-            print("DATAAAA", url, params, headers)
             response = requests.get(url, headers=headers, params=params)
             response.raise_for_status()
            
@@ -133,7 +132,6 @@ class EIU:
                 print(f"Other error occurred: {err}")
                 raise
 
-        print(merged_report)
         return merged_report
     
     def get_eiu_views(self, country_code, industry):
