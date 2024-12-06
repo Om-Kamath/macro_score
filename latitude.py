@@ -34,3 +34,14 @@ class AI:
         }
         response = requests.post(self.api_url, headers=self.headers, json=data)
         return response.json().get("response").get("text")
+    
+    def get_portfolio_macro_score_analysis(self, portfolio_json):
+        data = {
+            "path": "eiuMacroWithJson",
+            "stream": False,
+            "parameters": {
+                "portfolio": portfolio_json
+            }
+        }
+        response = requests.post(self.api_url, headers=self.headers, json=data)
+        return response.json().get("response").get("text")
