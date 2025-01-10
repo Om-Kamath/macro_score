@@ -1,71 +1,71 @@
 import streamlit as st
 from eiu import EIU
 from countries import countries
+from stocks import stock_dic
 from reports import report_codes
 from latitude import AI
 import yfinance as yf
+from bs4 import BeautifulSoup
+import pandas as pd
+import numpy as np
+import altair as alt
 
-window = st.sidebar.selectbox("Select a category", ["Country-wise Analysis", "MacroScore™"])
+
+st.title("MacroScore™ Analysis")
+
+stocks = st.multiselect("Select stocks", stock_dic, format_func=lambda x: x['stock'])
+
+stock_data = {}
+
 eiu = EIU()
 
-if window == "Country-wise Analysis":
-    st.title("Country-wise Analysis")
-    country = st.selectbox("Select a country", countries, format_func=lambda x: x['name'])
+if 'final_analysis' not in st.session_state:
+    st.session_state.final_analysis = ""
 
+if 'macro_score' not in st.session_state:
+    st.session_state.macro_score = 0
 
-    if st.button("Get Score"):
-        with st.spinner("Calculating macro score..."):
-            cols = st.columns(3)
-            country_ms = 0
-            for i, score_series in enumerate(["operationalRisk", "financialRisk"]):
-                source, value = eiu.get_score(score_series, country['code'])
-                country_ms += int(value)
-                cols[i].metric(label=source, value=value)
-            cols[2].metric(label="Country-wise MacroScore™", value=country_ms / 2)
-        
-        with st.spinner("Summarizing"):
-            # st.markdown(eiu.fetch_reports(country_code=country["code"], report_codes=report_codes), unsafe_allow_html=True)
-            st.markdown(AI().get_summary(eiu.fetch_reports(country_code=country["code"], report_codes=report_codes)), unsafe_allow_html=True)
+if 'historic_macro_score' not in st.session_state:
+    st.session_state.historic_macro_score = []
 
-elif window == "MacroScore™":
-    st.title("MacroScore™ Analysis")
-    
-    stocks = st.text_input("Enter stock symbols", placeholder="AAPL, TSLA, GOOGL")
-
-    stock_data = {}
-
-    if stocks:
-        all_stocks = stocks.replace(" ", "").upper().split(",")
-        for stock in all_stocks:
-            stock_info = yf.Ticker(stock).info
-            stock_name = stock_info.get('longName', 'Unknown')
-            stock_description = stock_info.get('longBusinessSummary', 'Unknown')
+if stocks:
+    # all_stocks = stocks.replace(" ", "").upper().split(",")
+    for stock in stocks:
+        stock_info = yf.Ticker(stock['stock']).info
+        stock_name = stock_info.get('longName', 'Unknown')
+        stock_description = stock_info.get('longBusinessSummary', 'Unknown')
+        with st.expander(f"{stock_name} Metadata"):
             st.write(f"#### {stock_name}")
             
-            allocation = st.number_input("Allocation (%)", value=0, key=f"{stock}_allocation")
-            industry = st.selectbox("Select an industry", ["Automotive", "Consumer goods", "Financial services", "Healthcare", "Energy", "Telecommunications"], key=f"{stock}_industry")
-            countries_selected = st.multiselect("Select countries", countries, format_func=lambda x: x['name'], key=f"{stock}_countries")
-            
-            stock_data[stock] = {
+            allocation = st.number_input("Allocation (%)", value=stock['allocation'], key=f"{stock}_allocation")
+            industry = st.selectbox("Select an industry", index=stock['industry'], options=["Automotive", "Consumer goods", "Financial services", "Healthcare", "Energy", "Telecommunications"], key=f"{stock}_industry")
+            countries_selected = st.multiselect("Select countries", default=stock['countries'],  options=countries, format_func=lambda x: x['name'], key=f"{stock}_countries")
+            stock_data[stock.get('stock')] = {
                 "stock_name": stock_name,
                 "stock_description": stock_description,
                 "allocation": allocation,
                 "industry": industry,
                 "macro_score": 0,
-                "countries": []
+                "countries": [],
+                "maps": stock.get('map')
             }
             
             for country in countries_selected:
                 st.write(f"Country: {country['name']}")
-                revenue = st.number_input("Revenue (%)", value=0, key=f"{stock}_{country['code']}_revenue")
-                stock_data[stock]["countries"].append({
+                default_revenue = next((revenue['revenue'] for revenue in stock['revenues'] if revenue['code'] == country['code']), 0)
+                revenue = st.number_input("Revenue (%)", value=default_revenue, key=f"{stock}_{country['code']}_revenue")
+                stock_data[stock.get('stock')]["countries"].append({
                     "country_name": country['name'],
                     "country_code": country['code'],
                     "revenue": revenue
                 })
+                
+        
 
-    if st.button("Get MacroScore™ Report"):
+    if st.button("Get MacroScore™"):
+        st.divider()
         for stock, data in stock_data.items():
+            st.session_state.historic_macro_score = np.random.randint(0, 101, size=10).tolist()  # 10 random values between 0 and 100
             with st.expander(f"{stock} Details"):
                 final_score = 0
                 for country in data["countries"]:
@@ -76,6 +76,7 @@ elif window == "MacroScore™":
                         try:
                             source_op, op_risk = eiu.get_score("operationalRisk", country['country_code'])
                             source_fin, fin_risk = eiu.get_score("financialRisk", country['country_code'])
+                           
                         except Exception as e:
                             st.error(f"Error occurred: There is not enough data for {country['country_name']}")
                             continue
@@ -90,9 +91,9 @@ elif window == "MacroScore™":
                 cols = st.columns(3)
                 cols[1].metric(label=f"{stock} MacroScore™", value=f"{final_score:.2f}")
 
-        overall_score = sum([data["macro_score"] * data["allocation"] / 100 for data in stock_data.values()])
-        st.metric(label="Overall MacroScore™", value=f"{overall_score:.2f}")
-        
+        st.session_state.macro_score = sum([data["macro_score"] * data["allocation"] / 100 for data in stock_data.values()])
+        st.session_state.historic_macro_score.append(st.session_state.macro_score)
+            
         with st.spinner("Generating a MacroScore™ Report"):
             all_risk_reports = ""
             all_eiu_views = ""
@@ -100,16 +101,28 @@ elif window == "MacroScore™":
                 stock_name = data["stock_name"]
                 revenue_countries = data["countries"]
                 for country in revenue_countries:
-                    all_risk_reports += f"For {country['country_name']}\n {eiu.fetch_reports(country_code=country['country_code'], report_codes=report_codes)}"
-                    all_eiu_views += f"For {country['country_name']}\n {eiu.get_eiu_views(country_code=country['country_code'], industry=industry)}"
+                    risk_report = BeautifulSoup(eiu.fetch_reports(country_code=country['country_code'], report_codes=report_codes), 'html.parser').get_text()
+                    eiu_views = BeautifulSoup(eiu.get_eiu_views(country_code=country['country_code'], industry=data["industry"]), 'html.parser').get_text()
+                    all_risk_reports += f"*For {country['country_name']}* {risk_report}"
+                    all_eiu_views += f"*For {country['country_name']}* {eiu_views}"
                     stock_data[stock]["risk_reports"] = all_risk_reports
                     stock_data[stock]["eiu_views"] = all_eiu_views
-                with st.expander("Risk Reports"):
-                    st.markdown(all_risk_reports, unsafe_allow_html=True)
-                with st.expander("EIU Views"):
-                    st.markdown(all_eiu_views, unsafe_allow_html=True)
-            # st.write(stock_data)
-            
 
-            # st.markdown(AI().get_macro_score_analysis(all_risk_reports, all_eiu_views, stock_name, stock_description), unsafe_allow_html=True)
-            st.markdown(AI().get_portfolio_macro_score_analysis(stock_data), unsafe_allow_html=True)
+            st.session_state.final_analysis = AI().get_portfolio_macro_score_analysis(stock_data)
+
+   
+    df = pd.DataFrame({
+        'MacroScore': st.session_state.historic_macro_score
+    })
+    
+    st.line_chart(df, width=250, height=250, x_label="Months", y_label="MacroScore™" )
+    st.metric(label="Overall MacroScore™", value=f"{st.session_state.macro_score:.2f}")
+
+    
+    @st.dialog("MacroScore™ Report", width="large")
+    def show_report():
+        st.markdown(st.session_state.final_analysis, unsafe_allow_html=True)
+
+    if st.session_state.final_analysis != "":
+        if st.button("Show MacroScore™ Report", type="secondary"):
+            show_report()

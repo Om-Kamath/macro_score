@@ -61,7 +61,7 @@ class EIU:
         try:
             response = requests.post(url, headers=headers, json=data)
             response.raise_for_status()
-            return response.json()['dataPointRecords'][0].get('source'), int(response.json()['dataPointRecords'][0]['points'][0].get('value'))
+            return response.json()['dataPointRecords'][0].get('source'), float(response.json()['dataPointRecords'][0]['points'][0].get('value'))
         except requests.exceptions.HTTPError as http_err:
             if response.status_code == 401:  # Unauthorized
                 self.token = self.get_token()
