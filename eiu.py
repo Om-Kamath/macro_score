@@ -38,6 +38,7 @@ class EIU:
         return self.token
     
     def get_score(self, score_series, country_code):
+        print(country_code)
         if not self.is_token_valid():
             self.get_token()
 
